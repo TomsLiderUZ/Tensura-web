@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="uz">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -597,7 +597,7 @@
 
             // Create canvas
             const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 6.0 });
+            const viewport = page.getViewport({ scale: 4.0 });
             const canvas = document.createElement("canvas");
             canvas.width = viewport.width;
             canvas.height = viewport.height;
@@ -643,7 +643,7 @@
       };
 
       const updatePDFLink = async () => {
-        const hash = location.hash;
+        const hash = location.pathname;
         const pdfPath = PDF_LINK(hash, false);
         const pdfName = PDF_LINK(hash, true);
         if (!pdfPath) {
