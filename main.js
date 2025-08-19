@@ -1,8 +1,5 @@
 const IMPORT_LIST = EXPORT_LIST;
 
-// Cache for storing generated image URLs
-const imageCache = new Map();
-
 // PDF Tools
 const pdfTools = document.getElementById("pdf_tools");
 const pdfMenu = document.getElementById("pdf_tools_menu");
@@ -67,11 +64,11 @@ const PDF_NAME = document.getElementById("title-pdf-name");
 const pdfContent = document.getElementById("pdf-content");
 const message_404 = "404 File Not Found";
 const message_content_404 = `<br><br><br><br><br><br><br><br><h1 style="font-size: 50px; text-align: center;">No Such File Exists.</h1>`;
-let totalPages = 0;
-let currentDisplayed = 1;
-let pdf = null;
-let currentVolume = null;
-let visiblePages = [];
+let totalPages = 0; // Store total number of pages
+let currentDisplayed = 1; // Track current displayed page index (1-based)
+let pdf = null; // Store PDF document object
+let currentVolume = null; // Store current volume from IMPORT_LIST
+let visiblePages = []; // Array of original page numbers that are visible
 
 const PDF_LINK = (value, file) => {
   let typeFile, fileName;
@@ -82,7 +79,7 @@ const PDF_LINK = (value, file) => {
     typeFile = "Manga";
     fileName = "chap-";
   }
-  const num = value.match(/\d+/)?.[0];
+  const num = value.match(/\d+/)?.[0]; // Match integer only
   if (!num) return null;
   return file
     ? `${fileName}${num}.pdf`
@@ -93,16 +90,19 @@ const buildVisiblePages = (totalPages, volume) => {
   const { start, end, block } = volume.page;
   const pages = [];
 
+  // Add start page as first
   if (start >= 1 && start <= totalPages && !block.includes(start)) {
     pages.push(start);
   }
 
+  // Add all non-blocked pages except start and end
   for (let i = 1; i <= totalPages; i++) {
     if (i !== start && i !== end && !block.includes(i)) {
       pages.push(i);
     }
   }
 
+  // Add end page as last
   if (end >= 1 && end <= totalPages && !block.includes(end) && start !== end) {
     pages.push(end);
   }
@@ -133,20 +133,15 @@ const renderPage = async (displayedNum, canvas) => {
 };
 
 const getPageImageURL = async (pdfPath, startPage) => {
-  const cacheKey = `${pdfPath}:${startPage}`;
-  if (imageCache.has(cacheKey)) {
-    return imageCache.get(cacheKey);
-  }
-
   try {
     const pdf = await pdfjsLib.getDocument(pdfPath).promise;
     const totalPages = pdf.numPages;
     if (startPage === null || startPage < 1 || startPage > totalPages) {
-      return "";
+      return ""; // Return empty string if start page is invalid
     }
     const page = await pdf.getPage(startPage);
-    const targetWidth = 1200; // Reduced size for faster processing
-    const targetHeight = 1800;
+    const targetWidth = 2400;
+    const targetHeight = 3600;
     const viewport = page.getViewport({ scale: 1.0 });
     const scale = Math.min(
       targetWidth / viewport.width,
@@ -157,6 +152,7 @@ const getPageImageURL = async (pdfPath, startPage) => {
     canvas.width = targetWidth;
     canvas.height = targetHeight;
     const context = canvas.getContext("2d");
+    // Center the page in the canvas
     const offsetX = (targetWidth - scaledViewport.width) / 2;
     const offsetY = (targetHeight - scaledViewport.height) / 2;
     context.translate(offsetX, offsetY);
@@ -164,9 +160,7 @@ const getPageImageURL = async (pdfPath, startPage) => {
       canvasContext: context,
       viewport: scaledViewport,
     }).promise;
-    const imageUrl = canvas.toDataURL("image/jpeg", 0.8); // Use JPEG for smaller size
-    imageCache.set(cacheKey, imageUrl);
-    return imageUrl;
+    return canvas.toDataURL("image/png", 1.0); // Quality set to maximum
   } catch (err) {
     console.error("Error generating page image:", err);
     return "";
@@ -175,15 +169,22 @@ const getPageImageURL = async (pdfPath, startPage) => {
 
 const saveEditedPDF = async (pdfPath, visiblePages, volumeTitle) => {
   try {
+    // Load the original PDF
     const response = await fetch(pdfPath);
     const pdfBytes = await response.arrayBuffer();
     const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+
+    // Create a new PDF document
     const newPdfDoc = await PDFLib.PDFDocument.create();
+
+    // Copy only the visible pages to the new PDF
     const copiedPages = await newPdfDoc.copyPages(
       pdfDoc,
       visiblePages.map((page) => page - 1)
     );
     copiedPages.forEach((page) => newPdfDoc.addPage(page));
+
+    // Save the new PDF
     const pdfBytesNew = await newPdfDoc.save();
     const blob = new Blob([pdfBytesNew], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
@@ -198,97 +199,6 @@ const saveEditedPDF = async (pdfPath, visiblePages, volumeTitle) => {
   }
 };
 
-// Function to update meta tags dynamically
-const updateMetaTags = async (volume, pdfPath) => {
-  const imageSrc = await getPageImageURL(pdfPath, volume.page.start);
-  const metaTags = {
-    description: `Tensura ${volume.title} haqida ma'lumot. Ushbu PDF Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.`,
-    keywords: `Tensura, Anime, Rimuru, Reincarnation, Fantasy, ${volume.title}, Anime Syujeti, Tensura Fanlari, Anime Madaniyati`,
-    author: "Tensura Evolution",
-    ogTitle: `Tensura - ${volume.title}`,
-    ogDescription: `Tensura ${volume.title} haqida ma'lumot. Ushbu PDF Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.`,
-    ogImage: imageSrc || "https://anitoku.vercel.app/og-image.png", // Public fallback
-    ogUrl: `https://anitoku.vercel.app/#${volume.link}`,
-    twitterTitle: `Tensura - ${volume.title}`,
-    twitterDescription: `Tensura ${volume.title} haqida ma'lumot. Ushbu PDF Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.`,
-    twitterImage: imageSrc || "https://anitoku.vercel.app/og-image.png", // Public fallback
-  };
-
-  const head = document.head;
-  const setMetaTag = (name, content, property = null) => {
-    let meta = property
-      ? head.querySelector(`meta[property="${property}"]`)
-      : head.querySelector(`meta[name="${name}"]`);
-    if (!meta) {
-      meta = document.createElement("meta");
-      if (property) meta.setAttribute("property", property);
-      else meta.setAttribute("name", name);
-      head.appendChild(meta);
-    }
-    meta.setAttribute("content", content);
-  };
-
-  setMetaTag("description", metaTags.description);
-  setMetaTag("keywords", metaTags.keywords);
-  setMetaTag("author", metaTags.author);
-  setMetaTag("og:title", metaTags.ogTitle, "og:title");
-  setMetaTag("og:description", metaTags.ogDescription, "og:description");
-  setMetaTag("og:image", metaTags.ogImage, "og:image");
-  setMetaTag("og:url", metaTags.ogUrl, "og:url");
-  setMetaTag("og:type", "website", "og:type");
-  setMetaTag("twitter:card", "summary_large_image", "twitter:card");
-  setMetaTag("twitter:title", metaTags.twitterTitle, "twitter:title");
-  setMetaTag("twitter:description", metaTags.twitterDescription, "twitter:description");
-  setMetaTag("twitter:image", metaTags.twitterImage, "twitter:image");
-};
-
-// Function to set default meta tags
-const setDefaultMetaTags = () => {
-  const defaultMetaTags = {
-    description:
-      "Tensura (That Time I Got Reincarnated as a Slime) anime syujeti haqida qisqacha ma'lumot va qisimlari sonini o'rganing. Ushbu anime 48 qismdan iborat bo'lib, Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.",
-    keywords:
-      "Tensura, Anime, Rimuru, Reincarnation, Fantasy, Anime Syujeti, Tensura Fanlari, Anime Madaniyati",
-    author: "Tensura Evolution",
-    ogTitle: "Tensura - Syujet va Qisimlar",
-    ogDescription:
-      "Tensura anime syujeti haqida qisqacha ma'lumot va qisimlari sonini o'rganing. Ushbu anime 48 qismdan iborat bo'lib, Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.",
-    ogImage: "https://anitoku.vercel.app/og-image.png",
-    ogUrl: "https://anitoku.vercel.app",
-    twitterTitle: "Tensura - Syujet va Qisimlar",
-    twitterDescription:
-      "Tensura anime syujeti haqida qisqacha ma'lumot va qisimlari sonini o'rganing. Ushbu anime 48 qismdan iborat bo'lib, Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.",
-    twitterImage: "https://anitoku.vercel.app/og-image.png",
-  };
-
-  const head = document.head;
-  const setMetaTag = (name, content, property = null) => {
-    let meta = property
-      ? head.querySelector(`meta[property="${property}"]`)
-      : head.querySelector(`meta[name="${name}"]`);
-    if (!meta) {
-      meta = document.createElement("meta");
-      if (property) meta.setAttribute("property", property);
-      else meta.setAttribute("name", name);
-      head.appendChild(meta);
-    }
-    meta.setAttribute("content", content);
-  };
-
-  setMetaTag("description", defaultMetaTags.description);
-  setMetaTag("keywords", defaultMetaTags.keywords);
-  setMetaTag("author", defaultMetaTags.author);
-  setMetaTag("og:title", defaultMetaTags.ogTitle, "og:title");
-  setMetaTag("og:description", defaultMetaTags.ogDescription, "og:description");
-  setMetaTag("og:image", defaultMetaTags.ogImage, "og:image");
-  setMetaTag("og:url", defaultMetaTags.ogUrl, "og:url");
-  setMetaTag("og:type", "website", "og:type");
-  setMetaTag("twitter:card", "summary_large_image", "twitter:card");
-  setMetaTag("twitter:title", defaultMetaTags.twitterTitle, "twitter:title");
-  setMetaTag("twitter:description", defaultMetaTags.twitterDescription, "twitter:description");
-  setMetaTag("twitter:image", defaultMetaTags.twitterImage, "twitter:image");
-};
-
 const renderPDF = async (pdfPath, volume) => {
   pdfContent.innerHTML = "";
   try {
@@ -298,6 +208,7 @@ const renderPDF = async (pdfPath, volume) => {
     currentVolume = volume;
     console.log("Total Pages:", totalPages, "Volume:", volume);
 
+    // Compute visible pages
     visiblePages = buildVisiblePages(totalPages, volume);
     console.log("Visible Pages:", visiblePages);
 
@@ -305,34 +216,39 @@ const renderPDF = async (pdfPath, volume) => {
       throw new Error("No visible pages available.");
     }
 
-    await updateMetaTags(volume, pdfPath);
-
+    // Create single page container
     const pageContainer = document.createElement("div");
     pageContainer.className = "page-container";
     pageContainer.id = "page-container";
 
+    // Create page top container
     const pageTop = document.createElement("div");
     pageTop.className = "page-top";
 
+    // Create page title
     const pageTitle = document.createElement("div");
     pageTitle.className = "page-title";
     pageTitle.id = "page-title";
     pageTitle.textContent = `Page ${visiblePages[0]}`;
     pageTop.appendChild(pageTitle);
 
+    // Create buttons container
     const buttonsContainer = document.createElement("div");
     buttonsContainer.className = "page-buttons";
 
+    // Create Copy Img button
     const copyButton = document.createElement("button");
     copyButton.className = "page-button";
     copyButton.textContent = "Copy Img";
     buttonsContainer.appendChild(copyButton);
 
+    // Create Save Img button
     const saveButton = document.createElement("button");
     saveButton.className = "page-button";
     saveButton.textContent = "Save Img";
     buttonsContainer.appendChild(saveButton);
 
+    // Create Save Pdf button
     const savePdfButton = document.createElement("button");
     savePdfButton.className = "page-button";
     savePdfButton.textContent = "Save PDF";
@@ -341,9 +257,11 @@ const renderPDF = async (pdfPath, volume) => {
     pageTop.appendChild(buttonsContainer);
     pageContainer.appendChild(pageTop);
 
+    // Create canvas
     const canvas = document.createElement("canvas");
     pageContainer.appendChild(canvas);
 
+    // Create page navigation
     const pageRouter = document.createElement("div");
     pageRouter.className = "page-pdf-router";
     pageRouter.innerHTML = `
@@ -357,8 +275,10 @@ const renderPDF = async (pdfPath, volume) => {
     pageContainer.appendChild(pageRouter);
     pdfContent.appendChild(pageContainer);
 
+    // Render initial page
     await renderPage(1, canvas);
 
+    // Add event listener for Copy Img
     copyButton.addEventListener("click", async () => {
       try {
         await canvas.toBlob(async (blob) => {
@@ -372,6 +292,7 @@ const renderPDF = async (pdfPath, volume) => {
       }
     });
 
+    // Add event listener For Save Img
     saveButton.addEventListener("click", () => {
       canvas.toBlob((blob) => {
         const url = URL.createObjectURL(blob);
@@ -383,6 +304,7 @@ const renderPDF = async (pdfPath, volume) => {
       });
     });
 
+    // Add event listener for Save PDF
     savePdfButton.addEventListener("click", async () => {
       const password = prompt("Enter password to download edited PDF:");
       if (password === PDF_DOWNLOAD_PASSWORD) {
@@ -392,6 +314,7 @@ const renderPDF = async (pdfPath, volume) => {
       }
     });
 
+    // Add event listeners for navigation buttons
     const prevButton = document.getElementById("pdf-route-back");
     const nextButton = document.getElementById("pdf-route-next");
     const pageInput = document.getElementById("pdf-route-input");
@@ -442,7 +365,6 @@ const renderPDF = async (pdfPath, volume) => {
 const renderDefaultCards = async () => {
   PDF_NAME.innerHTML = "All available";
   document.title = "All available";
-  setDefaultMetaTags();
   const cards = await Promise.all(
     IMPORT_LIST.map(async (item) => {
       const pdfPath = PDF_LINK(item.link, false);
@@ -462,6 +384,7 @@ const updatePDFLink = async () => {
   const hash = location.href.split(location.host)[1];
   console.log("Hash:", hash);
 
+  // If no hash or hash is just "/", render default cards
   if (!hash || hash === "/" || hash === "/#") {
     await renderDefaultCards();
     return;
