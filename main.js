@@ -42,8 +42,7 @@ window.addEventListener("resize", () => {
 const PDF_DOWNLOAD_PASSWORD = atob(
   atob(atob(atob(atob("VjJ0V2ExWXlVbGhVV0hCWFltMTRZVlpXVVhkUFVUMDk="))))
 );
-
-// Populate sidebar from IMPORT_LIST
+// Populate sidebar
 const sidebarUl = sidebar.querySelector("ul");
 sidebarUl.innerHTML = IMPORT_LIST.map(
   (item) => `<li><a href="#${item.link}">${item.name}</a></li>`
@@ -63,13 +62,35 @@ links.forEach((link) =>
 const PDF_NAME = document.getElementById("title-pdf-name");
 const pdfContent = document.getElementById("pdf-content");
 const message_404 = "404 File Not Found";
-const message_content_404 = `<br><br><br><br><br><br><br><br><h1 style="font-size: 50px; text-align: center;">No Such File Exists.</h1>`;
-let totalPages = 0; // Store total number of pages
-let currentDisplayed = 1; // Track current displayed page index (1-based)
-let pdf = null; // Store PDF document object
-let currentVolume = null; // Store current volume from IMPORT_LIST
-let visiblePages = []; // Array of original page numbers that are visible
+const message_content_404 = `<h1 style="font-size: 50px; text-align: center;">No Such File Exists.</h1>`;
+let totalPages = 0;
+let currentDisplayed = 1;
+let pdf = null;
+let currentVolume = null;
+let visiblePages = [];
 
+// Loading
+
+pdfContent.innerHTML = `
+  <div class="loading-box">
+    <i class="fa fa-spinner"></i>
+    <span>Loading images . . .</span>
+  </div>
+`;
+
+const loadingBox = document.querySelector(".loading-box");
+const loadingMessage = document.getElementById("loading-message");
+
+const showLoading = () => {
+  if (loadingBox) loadingBox.style.display = "flex";
+  if (loadingMessage) loadingMessage.textContent = "Loading resources . . .";
+};
+
+const hideLoading = () => {
+  if (loadingBox) loadingBox.style.display = "none";
+};
+
+// PDF link generator
 const PDF_LINK = (value, file) => {
   let typeFile, fileName;
   if (value.includes("/novel/")) {
@@ -79,37 +100,32 @@ const PDF_LINK = (value, file) => {
     typeFile = "Manga";
     fileName = "chap-";
   }
-  const num = value.match(/\d+/)?.[0]; // Match integer only
+  const num = value.match(/\d+/)?.[0];
   if (!num) return null;
   return file
     ? `${fileName}${num}.pdf`
     : `/Tensura/${typeFile}/v1/${fileName}${num}.pdf`;
 };
 
+// Build visible pages
 const buildVisiblePages = (totalPages, volume) => {
   const { start, end, block } = volume.page;
   const pages = [];
-
-  // Add start page as first
   if (start >= 1 && start <= totalPages && !block.includes(start)) {
     pages.push(start);
   }
-
-  // Add all non-blocked pages except start and end
   for (let i = 1; i <= totalPages; i++) {
     if (i !== start && i !== end && !block.includes(i)) {
       pages.push(i);
     }
   }
-
-  // Add end page as last
   if (end >= 1 && end <= totalPages && !block.includes(end) && start !== end) {
     pages.push(end);
   }
-
   return pages;
 };
 
+// Render single page
 const renderPage = async (displayedNum, canvas) => {
   try {
     const originalPage = visiblePages[displayedNum - 1];
@@ -132,59 +148,48 @@ const renderPage = async (displayedNum, canvas) => {
   }
 };
 
+// Get page preview
 const getPageImageURL = async (pdfPath, startPage) => {
   try {
     const pdf = await pdfjsLib.getDocument(pdfPath).promise;
     const totalPages = pdf.numPages;
     if (startPage === null || startPage < 1 || startPage > totalPages) {
-      return ""; // Return empty string if start page is invalid
+      return "";
     }
     const page = await pdf.getPage(startPage);
-    const targetWidth = 2400;
-    const targetHeight = 3600;
     const viewport = page.getViewport({ scale: 1.0 });
-    const scale = Math.min(
-      targetWidth / viewport.width,
-      targetHeight / viewport.height
-    );
+    const scale = 2400 / viewport.width;
     const scaledViewport = page.getViewport({ scale });
     const canvas = document.createElement("canvas");
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
+    canvas.width = 2400;
+    canvas.height = 3600;
     const context = canvas.getContext("2d");
-    // Center the page in the canvas
-    const offsetX = (targetWidth - scaledViewport.width) / 2;
-    const offsetY = (targetHeight - scaledViewport.height) / 2;
+    const offsetX = (2400 - scaledViewport.width) / 2;
+    const offsetY = (3600 - scaledViewport.height) / 2;
     context.translate(offsetX, offsetY);
     await page.render({
       canvasContext: context,
       viewport: scaledViewport,
     }).promise;
-    return canvas.toDataURL("image/png", 1.0); // Quality set to maximum
+    return canvas.toDataURL("image/png", 1.0);
   } catch (err) {
     console.error("Error generating page image:", err);
     return "";
   }
 };
 
+// Save edited PDF
 const saveEditedPDF = async (pdfPath, visiblePages, volumeTitle) => {
   try {
-    // Load the original PDF
     const response = await fetch(pdfPath);
     const pdfBytes = await response.arrayBuffer();
     const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
-
-    // Create a new PDF document
     const newPdfDoc = await PDFLib.PDFDocument.create();
-
-    // Copy only the visible pages to the new PDF
     const copiedPages = await newPdfDoc.copyPages(
       pdfDoc,
       visiblePages.map((page) => page - 1)
     );
     copiedPages.forEach((page) => newPdfDoc.addPage(page));
-
-    // Save the new PDF
     const pdfBytesNew = await newPdfDoc.save();
     const blob = new Blob([pdfBytesNew], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
@@ -199,56 +204,47 @@ const saveEditedPDF = async (pdfPath, visiblePages, volumeTitle) => {
   }
 };
 
+// Render PDF
 const renderPDF = async (pdfPath, volume) => {
   pdfContent.innerHTML = "";
   try {
-    console.log("Attempting to load PDF:", pdfPath);
+    showLoading();
+
     pdf = await pdfjsLib.getDocument(pdfPath).promise;
     totalPages = pdf.numPages;
     currentVolume = volume;
-    console.log("Total Pages:", totalPages, "Volume:", volume);
-
-    // Compute visible pages
     visiblePages = buildVisiblePages(totalPages, volume);
-    console.log("Visible Pages:", visiblePages);
 
     if (visiblePages.length === 0) {
       throw new Error("No visible pages available.");
     }
 
-    // Create single page container
     const pageContainer = document.createElement("div");
     pageContainer.className = "page-container";
     pageContainer.id = "page-container";
 
-    // Create page top container
     const pageTop = document.createElement("div");
     pageTop.className = "page-top";
 
-    // Create page title
     const pageTitle = document.createElement("div");
     pageTitle.className = "page-title";
     pageTitle.id = "page-title";
-    pageTitle.textContent = `Page ${visiblePages[0]}`;
+    pageTitle.textContent = `Page 0`;
     pageTop.appendChild(pageTitle);
 
-    // Create buttons container
     const buttonsContainer = document.createElement("div");
     buttonsContainer.className = "page-buttons";
 
-    // Create Copy Img button
     const copyButton = document.createElement("button");
     copyButton.className = "page-button";
     copyButton.textContent = "Copy Img";
     buttonsContainer.appendChild(copyButton);
 
-    // Create Save Img button
     const saveButton = document.createElement("button");
     saveButton.className = "page-button";
     saveButton.textContent = "Save Img";
     buttonsContainer.appendChild(saveButton);
 
-    // Create Save Pdf button
     const savePdfButton = document.createElement("button");
     savePdfButton.className = "page-button";
     savePdfButton.textContent = "Save PDF";
@@ -257,11 +253,9 @@ const renderPDF = async (pdfPath, volume) => {
     pageTop.appendChild(buttonsContainer);
     pageContainer.appendChild(pageTop);
 
-    // Create canvas
     const canvas = document.createElement("canvas");
     pageContainer.appendChild(canvas);
 
-    // Create page navigation
     const pageRouter = document.createElement("div");
     pageRouter.className = "page-pdf-router";
     pageRouter.innerHTML = `
@@ -275,10 +269,10 @@ const renderPDF = async (pdfPath, volume) => {
     pageContainer.appendChild(pageRouter);
     pdfContent.appendChild(pageContainer);
 
-    // Render initial page
     await renderPage(1, canvas);
+    hideLoading();
 
-    // Add event listener for Copy Img
+    // Copy Img
     copyButton.addEventListener("click", async () => {
       try {
         await canvas.toBlob(async (blob) => {
@@ -292,7 +286,7 @@ const renderPDF = async (pdfPath, volume) => {
       }
     });
 
-    // Add event listener For Save Img
+    // Save Img
     saveButton.addEventListener("click", () => {
       canvas.toBlob((blob) => {
         const url = URL.createObjectURL(blob);
@@ -304,7 +298,7 @@ const renderPDF = async (pdfPath, volume) => {
       });
     });
 
-    // Add event listener for Save PDF
+    // Save Pdf
     savePdfButton.addEventListener("click", async () => {
       const password = prompt("Enter password to download edited PDF:");
       if (password === PDF_DOWNLOAD_PASSWORD) {
@@ -314,7 +308,7 @@ const renderPDF = async (pdfPath, volume) => {
       }
     });
 
-    // Add event listeners for navigation buttons
+    // Navigation
     const prevButton = document.getElementById("pdf-route-back");
     const nextButton = document.getElementById("pdf-route-next");
     const pageInput = document.getElementById("pdf-route-input");
@@ -359,16 +353,23 @@ const renderPDF = async (pdfPath, volume) => {
     PDF_NAME.innerHTML = message_404;
     document.title = message_404;
     pdfContent.innerHTML = message_content_404;
+    hideLoading();
   }
 };
 
+// Render cards
 const renderDefaultCards = async () => {
   PDF_NAME.innerHTML = "All available";
   document.title = "All available";
+
+  showLoading();
+
+  let loaded = 0;
   const cards = await Promise.all(
     IMPORT_LIST.map(async (item) => {
       const pdfPath = PDF_LINK(item.link, false);
       const imageSrc = await getPageImageURL(pdfPath, item.page.start);
+      loaded++;
       return `
         <a href="#${item.link}" class="page-card-container">
           <img src="${imageSrc}" alt="${item.title}" class="page-card-img">
@@ -377,14 +378,15 @@ const renderDefaultCards = async () => {
       `;
     })
   );
+
   pdfContent.innerHTML = cards.join("");
+  hideLoading();
 };
 
+// Update PDF link
 const updatePDFLink = async () => {
   const hash = location.href.split(location.host)[1];
-  console.log("Hash:", hash);
 
-  // If no hash or hash is just "/", render default cards
   if (!hash || hash === "/" || hash === "/#") {
     await renderDefaultCards();
     return;
@@ -395,26 +397,19 @@ const updatePDFLink = async () => {
   const volume =
     IMPORT_LIST.find((item) => item.link === hash.split("#")[1]) ||
     IMPORT_LIST[0];
-  console.log("PDF Path:", pdfPath);
-  console.log("PDF Name:", pdfName);
-  console.log("Volume:", volume);
 
   if (!pdfPath || !volume) {
-    console.log("Invalid PDF path or volume, showing default cards");
     await renderDefaultCards();
     return;
   }
 
   try {
-    console.log("Fetching:", pdfPath);
     const resp = await fetch(pdfPath, { method: "HEAD" });
-    console.log("Fetch Status:", resp.status);
     if (resp.ok) {
       PDF_NAME.innerHTML = volume.title;
       document.title = volume.title;
       await renderPDF(pdfPath, volume);
     } else {
-      console.log("Fetch failed, showing default cards");
       await renderDefaultCards();
     }
   } catch (err) {
