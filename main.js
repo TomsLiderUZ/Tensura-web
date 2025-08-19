@@ -199,6 +199,102 @@ const saveEditedPDF = async (pdfPath, visiblePages, volumeTitle) => {
   }
 };
 
+// Function to update meta tags dynamically
+const updateMetaTags = async (volume, pdfPath) => {
+  const imageSrc = await getPageImageURL(pdfPath, volume.page.start);
+  const metaTags = {
+    description: `Tensura ${volume.title} haqida ma'lumot. Ushbu PDF Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.`,
+    keywords: `Tensura, Anime, Rimuru, Reincarnation, Fantasy, ${volume.title}, Anime Syujeti, Tensura Fanlari, Anime Madaniyati`,
+    author: "Tensura Evolution",
+    ogTitle: `Tensura - ${volume.title}`,
+    ogDescription: `Tensura ${volume.title} haqida ma'lumot. Ushbu PDF Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.`,
+    ogImage: imageSrc || "/og-image.png", // Fallback to default if imageSrc is empty
+    ogUrl: `https://anitoku.vercel.app/#${volume.link}`,
+    twitterTitle: `Tensura - ${volume.title}`,
+    twitterDescription: `Tensura ${volume.title} haqida ma'lumot. Ushbu PDF Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.`,
+    twitterImage: imageSrc || "/og-image.png", // Fallback to default if imageSrc is empty
+  };
+
+  // Update or create meta tags
+  const head = document.head;
+
+  // Helper function to update or create a meta tag
+  const setMetaTag = (name, content, property = null) => {
+    let meta = property
+      ? head.querySelector(`meta[property="${property}"]`)
+      : head.querySelector(`meta[name="${name}"]`);
+    if (!meta) {
+      meta = document.createElement("meta");
+      if (property) meta.setAttribute("property", property);
+      else meta.setAttribute("name", name);
+      head.appendChild(meta);
+    }
+    meta.setAttribute("content", content);
+  };
+
+  // Set meta tags
+  setMetaTag("description", metaTags.description);
+  setMetaTag("keywords", metaTags.keywords);
+  setMetaTag("author", metaTags.author);
+  setMetaTag("og:title", metaTags.ogTitle, "og:title");
+  setMetaTag("og:description", metaTags.ogDescription, "og:description");
+  setMetaTag("og:image", metaTags.ogImage, "og:image");
+  setMetaTag("og:url", metaTags.ogUrl, "og:url");
+  setMetaTag("og:type", "website", "og:type");
+  setMetaTag("twitter:card", "summary_large_image", "twitter:card");
+  setMetaTag("twitter:title", metaTags.twitterTitle, "twitter:title");
+  setMetaTag("twitter:description", metaTags.twitterDescription, "twitter:description");
+  setMetaTag("twitter:image", metaTags.twitterImage, "twitter:image");
+};
+
+// Function to set default meta tags for the cards view
+const setDefaultMetaTags = () => {
+  const defaultMetaTags = {
+    description:
+      "Tensura (That Time I Got Reincarnated as a Slime) anime syujeti haqida qisqacha ma'lumot va qisimlari sonini o'rganing. Ushbu anime 48 qismdan iborat bo'lib, Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.",
+    keywords:
+      "Tensura, Anime, Rimuru, Reincarnation, Fantasy, Anime Syujeti, Tensura Fanlari, Anime Madaniyati",
+    author: "Tensura Evolution",
+    ogTitle: "Tensura - Syujet va Qisimlar",
+    ogDescription:
+      "Tensura anime syujeti haqida qisqacha ma'lumot va qisimlari sonini o'rganing. Ushbu anime 48 qismdan iborat bo'lib, Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.",
+    ogImage: "/og-image.png",
+    ogUrl: "https://anitoku.vercel.app",
+    twitterTitle: "Tensura - Syujet va Qisimlar",
+    twitterDescription:
+      "Tensura anime syujeti haqida qisqacha ma'lumot va qisimlari sonini o'rganing. Ushbu anime 48 qismdan iborat bo'lib, Rimuru va uning do'stlarining yangi dunyodagi sarguzashtlarini o'z ichiga oladi.",
+    twitterImage: "/og-image.png",
+  };
+
+  const head = document.head;
+
+  const setMetaTag = (name, content, property = null) => {
+    let meta = property
+      ? head.querySelector(`meta[property="${property}"]`)
+      : head.querySelector(`meta[name="${name}"]`);
+    if (!meta) {
+      meta = document.createElement("meta");
+      if (property) meta.setAttribute("property", property);
+      else meta.setAttribute("name", name);
+      head.appendChild(meta);
+    }
+    meta.setAttribute("content", content);
+  };
+
+  setMetaTag("description", defaultMetaTags.description);
+  setMetaTag("keywords", defaultMetaTags.keywords);
+  setMetaTag("author", defaultMetaTags.author);
+  setMetaTag("og:title", defaultMetaTags.ogTitle, "og:title");
+  setMetaTag("og:description", defaultMetaTags.ogDescription, "og:description");
+  setMetaTag("og:image", defaultMetaTags.ogImage, "og:image");
+  setMetaTag("og:url", defaultMetaTags.ogUrl, "og:url");
+  setMetaTag("og:type", "website", "og:type");
+  setMetaTag("twitter:card", "summary_large_image", "twitter:card");
+  setMetaTag("twitter:title", defaultMetaTags.twitterTitle, "twitter:title");
+  setMetaTag("twitter:description", defaultMetaTags.twitterDescription, "twitter:description");
+  setMetaTag("twitter:image", defaultMetaTags.twitterImage, "twitter:image");
+};
+
 const renderPDF = async (pdfPath, volume) => {
   pdfContent.innerHTML = "";
   try {
@@ -215,6 +311,9 @@ const renderPDF = async (pdfPath, volume) => {
     if (visiblePages.length === 0) {
       throw new Error("No visible pages available.");
     }
+
+    // Update meta tags for this specific PDF
+    await updateMetaTags(volume, pdfPath);
 
     // Create single page container
     const pageContainer = document.createElement("div");
@@ -365,6 +464,8 @@ const renderPDF = async (pdfPath, volume) => {
 const renderDefaultCards = async () => {
   PDF_NAME.innerHTML = "All available";
   document.title = "All available";
+  // Set default meta tags
+  setDefaultMetaTags();
   const cards = await Promise.all(
     IMPORT_LIST.map(async (item) => {
       const pdfPath = PDF_LINK(item.link, false);
