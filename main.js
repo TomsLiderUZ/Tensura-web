@@ -113,6 +113,7 @@ links.forEach((link) =>
 // PDF Loader
 const PDF_NAME = document.getElementById("title-pdf-name");
 const pdfContent = document.getElementById("pdf-content");
+const loadingMessage = document.getElementById("loading-message"); // Assuming you have <div id="loading-message" style="display: none; text-align: center; font-size: 24px; margin-top: 50px;">Loading...</div> in HTML
 const message_404 = "404 File Not Found";
 const message_content_404 = `<br><br><br><br><br><br><br><br><h1 style="font-size: 50px; text-align: center;">No Such File Exists.<h1/>`;
 let totalPages = 0; // Store total number of pages
@@ -184,7 +185,9 @@ const renderPage = async (displayedNum, canvas) => {
 };
 
 const renderPDF = async (pdfPath, volume) => {
-  pdfContent.innerHTML = "";
+  pdfContent.innerHTML = ""; // Clear previous content
+  if (loadingMessage) loadingMessage.style.display = "block"; // Show loading
+
   try {
     console.log("Attempting to load PDF:", pdfPath);
     pdf = await pdfjsLib.getDocument(pdfPath).promise;
@@ -199,6 +202,8 @@ const renderPDF = async (pdfPath, volume) => {
     if (visiblePages.length === 0) {
       throw new Error("No visible pages available.");
     }
+
+    if (loadingMessage) loadingMessage.style.display = "none"; // Hide loading
 
     // Create single page container
     const pageContainer = document.createElement("div");
@@ -324,6 +329,7 @@ const renderPDF = async (pdfPath, volume) => {
     });
   } catch (err) {
     console.error("PDF Render Error:", err);
+    if (loadingMessage) loadingMessage.style.display = "none"; // Hide loading on error
     PDF_NAME.innerHTML = message_404;
     document.title = message_404;
     pdfContent.innerHTML = message_content_404;
@@ -343,6 +349,7 @@ const updatePDFLink = async () => {
   console.log("Volume:", volume);
   if (!pdfPath || !volume) {
     console.log("Invalid PDF path or volume, showing 404");
+    if (loadingMessage) loadingMessage.style.display = "none";
     PDF_NAME.innerHTML = message_404;
     document.title = message_404;
     pdfContent.innerHTML = message_content_404;
@@ -358,12 +365,14 @@ const updatePDFLink = async () => {
       await renderPDF(pdfPath, volume);
     } else {
       console.log("Fetch failed, showing 404");
+      if (loadingMessage) loadingMessage.style.display = "none";
       PDF_NAME.innerHTML = message_404;
       document.title = message_404;
       pdfContent.innerHTML = message_content_404;
     }
   } catch (err) {
     console.error("Fetch Error:", err);
+    if (loadingMessage) loadingMessage.style.display = "none";
     PDF_NAME.innerHTML = message_404;
     document.title = message_404;
     pdfContent.innerHTML = message_content_404;

@@ -332,3 +332,18 @@ body {
   .pdf-route-input { width:45px; padding:4px 6px; font-size:0.8rem; }
   .page-button { padding:4px 10px; font-size:0.75rem; }
 }
+
+
+#loading-message {
+  font-size: 24px;
+  text-align: center;
+  margin-top: 50px;
+  color: #333;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
