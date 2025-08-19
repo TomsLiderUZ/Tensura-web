@@ -1,8 +1,4 @@
-// PDF Tools
-const pdfTools = document.getElementById("pdf_tools");
-const pdfMenu = document.getElementById("pdf_tools_menu");
-const fullscreenCheckbox = document.getElementById("fullscreenCheck");
-
+// Import List
 const IMPORT_LIST = [
   {
     title: "Tensura Volume 1",
@@ -11,7 +7,10 @@ const IMPORT_LIST = [
     page: {
       start: 1,
       end: 2,
-      block: [3, 5, 7],
+      block: [
+        3, 5, 7, 8, 9, 10, 11, 19, 25, 46, 65, 67, 73, 75, 118, 127, 129, 157, 194,
+        196, 213, 227, 245, 250, 254, 256, 258, 260, 287,
+      ],
     },
   },
   {
@@ -24,7 +23,42 @@ const IMPORT_LIST = [
       block: [3, 5],
     },
   },
+  {
+    title: "Tensura Volume 3",
+    name: "Volume 3",
+    link: "/novel/3",
+    page: {
+      start: 1,
+      end: null,
+      block: [],
+    },
+  },
+  {
+    title: "Tensura Volume 4",
+    name: "Volume 4",
+    link: "/novel/4",
+    page: {
+      start: null,
+      end: null,
+      block: [],
+    },
+  },
+  {
+    title: "Tensura Volume 5",
+    name: "Volume 5",
+    link: "/novel/5",
+    page: {
+      start: null,
+      end: null,
+      block: [],
+    },
+  },
 ];
+
+// PDF Tools
+const pdfTools = document.getElementById("pdf_tools");
+const pdfMenu = document.getElementById("pdf_tools_menu");
+const fullscreenCheckbox = document.getElementById("fullscreenCheck");
 
 pdfTools.addEventListener("click", () => {
   pdfMenu.classList.toggle("show");
@@ -48,17 +82,6 @@ burger.addEventListener("click", () => {
   if (window.innerWidth > 768) main.classList.toggle("shift");
 });
 
-const links = sidebar.querySelectorAll("a");
-links.forEach((link) =>
-  link.addEventListener("click", () => {
-    if (window.innerWidth <= 768) {
-      sidebar.classList.remove("show");
-      burger.classList.remove("active");
-      main.classList.remove("shift");
-    }
-  })
-);
-
 window.addEventListener("resize", () => {
   if (window.innerWidth > 768) {
     sidebar.classList.add("show");
@@ -71,14 +94,32 @@ window.addEventListener("resize", () => {
   }
 });
 
+// Populate sidebar from IMPORT_LIST
+const sidebarUl = sidebar.querySelector("ul");
+sidebarUl.innerHTML = IMPORT_LIST.map(
+  (item) => `<li><a href="#${item.link}">${item.name}</a></li>`
+).join("");
+const links = sidebar.querySelectorAll("a");
+links.forEach((link) =>
+  link.addEventListener("click", () => {
+    if (window.innerWidth <= 768) {
+      sidebar.classList.remove("show");
+      burger.classList.remove("active");
+      main.classList.remove("shift");
+    }
+  })
+);
+
 // PDF Loader
 const PDF_NAME = document.getElementById("title-pdf-name");
 const pdfContent = document.getElementById("pdf-content");
 const message_404 = "404 File Not Found";
 const message_content_404 = `<br><br><br><br><br><br><br><br><h1 style="font-size: 50px; text-align: center;">No Such File Exists.<h1/>`;
 let totalPages = 0; // Store total number of pages
-let currentPage = 1; // Track current page
+let currentDisplayed = 1; // Track current displayed page index (1-based)
 let pdf = null; // Store PDF document object
+let currentVolume = null; // Store current volume from IMPORT_LIST
+let visiblePages = []; // Array of original page numbers that are visible
 
 const PDF_LINK = (value, file) => {
   let typeFile, fileName;
@@ -96,9 +137,35 @@ const PDF_LINK = (value, file) => {
     : `/Tensura/${typeFile}/v1/${fileName}${num}.pdf`;
 };
 
-const renderPage = async (pageNum, canvas) => {
+const buildVisiblePages = (totalPages, volume) => {
+  const { start, end, block } = volume.page;
+  const pages = [];
+
+  // Add start page as first
+  if (start >= 1 && start <= totalPages && !block.includes(start)) {
+    pages.push(start);
+  }
+
+  // Add all non-blocked pages except start and end
+  for (let i = 1; i <= totalPages; i++) {
+    if (i !== start && i !== end && !block.includes(i)) {
+      pages.push(i);
+    }
+  }
+
+  // Add end page as last
+  if (end >= 1 && end <= totalPages && !block.includes(end) && start !== end) {
+    pages.push(end);
+  }
+
+  return pages;
+};
+
+const renderPage = async (displayedNum, canvas) => {
   try {
-    const page = await pdf.getPage(pageNum);
+    const originalPage = visiblePages[displayedNum - 1];
+    if (!originalPage) throw new Error("Invalid page number");
+    const page = await pdf.getPage(originalPage);
     const viewport = page.getViewport({ scale: 6.0 });
     canvas.width = viewport.width;
     canvas.height = viewport.height;
@@ -106,22 +173,32 @@ const renderPage = async (pageNum, canvas) => {
       canvasContext: canvas.getContext("2d"),
       viewport,
     }).promise;
-    document.getElementById("page-title").textContent = `Page ${pageNum}`;
-    document.getElementById("pdf-route-input").value = pageNum;
-    document.getElementById("pdf-route-max-value").textContent = totalPages;
-    currentPage = pageNum;
+    document.getElementById("page-title").textContent = `Page ${originalPage}`;
+    document.getElementById("pdf-route-input").value = displayedNum;
+    document.getElementById("pdf-route-max-value").textContent =
+      visiblePages.length;
+    currentDisplayed = displayedNum;
   } catch (err) {
     console.error("Page Render Error:", err);
   }
 };
 
-const renderPDF = async (pdfPath) => {
+const renderPDF = async (pdfPath, volume) => {
   pdfContent.innerHTML = "";
   try {
     console.log("Attempting to load PDF:", pdfPath);
     pdf = await pdfjsLib.getDocument(pdfPath).promise;
     totalPages = pdf.numPages;
-    console.log("Total Pages:", totalPages);
+    currentVolume = volume;
+    console.log("Total Pages:", totalPages, "Volume:", volume);
+
+    // Compute visible pages
+    visiblePages = buildVisiblePages(totalPages, volume);
+    console.log("Visible Pages:", visiblePages);
+
+    if (visiblePages.length === 0) {
+      throw new Error("No visible pages available.");
+    }
 
     // Create single page container
     const pageContainer = document.createElement("div");
@@ -136,7 +213,7 @@ const renderPDF = async (pdfPath) => {
     const pageTitle = document.createElement("div");
     pageTitle.className = "page-title";
     pageTitle.id = "page-title";
-    pageTitle.textContent = `Page ${currentPage}`;
+    pageTitle.textContent = `Page ${visiblePages[0]}`;
     pageTop.appendChild(pageTitle);
 
     // Create buttons container
@@ -168,16 +245,16 @@ const renderPDF = async (pdfPath) => {
     pageRouter.innerHTML = `
       <button class="pdf-route-btn" id="pdf-route-back"><i class="fa-solid fa-angle-left"></i></button>
       <div class="pdf-route-value">
-        <input type="number" min="1" max="${totalPages}" class="pdf-route-input" id="pdf-route-input" value="${currentPage}">
-        /<span id="pdf-route-max-value">${totalPages}</span>
+        <input type="number" min="1" max="${visiblePages.length}" class="pdf-route-input" id="pdf-route-input" value="1">
+        /<span id="pdf-route-max-value">${visiblePages.length}</span>
       </div>
       <button class="pdf-route-btn" id="pdf-route-next"><i class="fa-solid fa-angle-right"></i></button>
     `;
     pageContainer.appendChild(pageRouter);
     pdfContent.appendChild(pageContainer);
 
-    // Render first page
-    await renderPage(currentPage, canvas);
+    // Render initial page
+    await renderPage(1, canvas);
 
     // Add event listener for Copy Img
     copyButton.addEventListener("click", async () => {
@@ -199,7 +276,7 @@ const renderPDF = async (pdfPath) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `page-${currentPage}.png`;
+        a.download = `page-${visiblePages[currentDisplayed - 1]}.png`;
         a.click();
         URL.revokeObjectURL(url);
       });
@@ -211,37 +288,37 @@ const renderPDF = async (pdfPath) => {
     const pageInput = document.getElementById("pdf-route-input");
 
     prevButton.addEventListener("click", async () => {
-      if (currentPage > 1) {
-        currentPage--;
-        await renderPage(currentPage, canvas);
+      if (currentDisplayed > 1) {
+        currentDisplayed--;
+        await renderPage(currentDisplayed, canvas);
       }
     });
 
     nextButton.addEventListener("click", async () => {
-      if (currentPage < totalPages) {
-        currentPage++;
-        await renderPage(currentPage, canvas);
+      if (currentDisplayed < visiblePages.length) {
+        currentDisplayed++;
+        await renderPage(currentDisplayed, canvas);
       }
     });
 
     pageInput.addEventListener("change", async (e) => {
-      const pageNum = parseInt(e.target.value);
-      if (pageNum >= 1 && pageNum <= totalPages) {
-        currentPage = pageNum;
-        await renderPage(currentPage, canvas);
+      const displayedNum = parseInt(e.target.value);
+      if (displayedNum >= 1 && displayedNum <= visiblePages.length) {
+        currentDisplayed = displayedNum;
+        await renderPage(currentDisplayed, canvas);
       } else {
-        e.target.value = currentPage;
+        e.target.value = currentDisplayed;
       }
     });
 
     pageInput.addEventListener("keypress", async (e) => {
       if (e.key === "Enter") {
-        const pageNum = parseInt(e.target.value);
-        if (pageNum >= 1 && pageNum <= totalPages) {
-          currentPage = pageNum;
-          await renderPage(currentPage, canvas);
+        const displayedNum = parseInt(e.target.value);
+        if (displayedNum >= 1 && displayedNum <= visiblePages.length) {
+          currentDisplayed = displayedNum;
+          await renderPage(currentDisplayed, canvas);
         } else {
-          e.target.value = currentPage;
+          e.target.value = currentDisplayed;
         }
       }
     });
@@ -254,14 +331,18 @@ const renderPDF = async (pdfPath) => {
 };
 
 const updatePDFLink = async () => {
-  const hash = location.href.split(location.host)[1];
+  const hash = location.href.split(location.host)[1] || "/novel/1"; // Default to /novel/1
   console.log("Hash:", hash);
+  const volume =
+    IMPORT_LIST.find((item) => item.link === hash.split("#")[1]) ||
+    IMPORT_LIST[0];
   const pdfPath = PDF_LINK(hash, false);
   const pdfName = PDF_LINK(hash, true);
   console.log("PDF Path:", pdfPath);
   console.log("PDF Name:", pdfName);
-  if (!pdfPath) {
-    console.log("Invalid PDF path, showing 404");
+  console.log("Volume:", volume);
+  if (!pdfPath || !volume) {
+    console.log("Invalid PDF path or volume, showing 404");
     PDF_NAME.innerHTML = message_404;
     document.title = message_404;
     pdfContent.innerHTML = message_content_404;
@@ -272,9 +353,9 @@ const updatePDFLink = async () => {
     const resp = await fetch(pdfPath, { method: "HEAD" });
     console.log("Fetch Status:", resp.status);
     if (resp.ok) {
-      PDF_NAME.innerHTML = pdfName;
-      document.title = pdfName;
-      await renderPDF(pdfPath);
+      PDF_NAME.innerHTML = volume.title;
+      document.title = volume.title;
+      await renderPDF(pdfPath, volume);
     } else {
       console.log("Fetch failed, showing 404");
       PDF_NAME.innerHTML = message_404;
