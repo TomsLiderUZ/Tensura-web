@@ -46,7 +46,7 @@ const PDF_DOWNLOAD_PASSWORD = atob(
 // Populate sidebar from IMPORT_LIST
 const sidebarUl = sidebar.querySelector("ul");
 sidebarUl.innerHTML = IMPORT_LIST.map(
-  (item) => `<li><a href="${item.link}">${item.name}</a></li>`
+  (item) => `<li><a href="#${item.link}">${item.name}</a></li>`
 ).join("");
 const links = sidebar.querySelectorAll("a");
 links.forEach((link) =>
@@ -370,7 +370,7 @@ const renderDefaultCards = async () => {
       const pdfPath = PDF_LINK(item.link, false);
       const imageSrc = await getPageImageURL(pdfPath, item.page.start);
       return `
-        <a href="${item.link}" class="page-card-container">
+        <a href="#${item.link}" class="page-card-container">
           <img src="${imageSrc}" alt="${item.title}" class="page-card-img">
           <div class="page-card-title">${item.title}</div>
         </a>
