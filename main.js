@@ -1,4 +1,4 @@
-const IMPORT_LIST = EXPORT_LIST
+const IMPORT_LIST = EXPORT_LIST; // Assumes EXPORT_LIST is defined elsewhere
 
 // PDF Tools
 const pdfTools = document.getElementById("pdf_tools");
@@ -381,11 +381,17 @@ const renderDefaultCards = async () => {
 };
 
 const updatePDFLink = async () => {
-  const hash = location.href.split(location.host)[1];
+  let hash = location.href.split(location.host)[1];
   console.log("Hash:", hash);
 
+  // Normalize hash: treat "#/" and "#" to "/"
+  if (hash === "/#" || hash === "#") {
+    history.replaceState(null, null, "/");
+    hash = "/";
+  }
+
   // If no hash or hash is just "/", render default cards
-  if (!hash || hash === "/" || hash === "/#") {
+  if (!hash || hash === "/") {
     await renderDefaultCards();
     return;
   }
