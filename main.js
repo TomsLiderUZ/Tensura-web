@@ -39,9 +39,7 @@ window.addEventListener("resize", () => {
   }
 });
 
-const PDF_DOWNLOAD_PASSWORD = atob(
-  atob(atob(atob(atob("VjJ0V2ExWXlVbGhVV0hCWFltMTRZVlpXVVhkUFVUMDk="))))
-);
+const PDF_DOWNLOAD_PASSWORD = "VjJ0V2ExWXlVbGhVV0hCWFltMTRZVlpXVVhkUFVUMDk=";
 // Populate sidebar
 const sidebarUl = sidebar.querySelector("ul");
 sidebarUl.innerHTML = IMPORT_LIST.map(
@@ -301,7 +299,7 @@ const renderPDF = async (pdfPath, volume) => {
     // Save Pdf
     savePdfButton.addEventListener("click", async () => {
       const password = prompt("Enter password to download edited PDF:");
-      if (password === PDF_DOWNLOAD_PASSWORD) {
+      if (password === atob(atob(atob(atob(atob(PDF_DOWNLOAD_PASSWORD)))))) {
         await saveEditedPDF(pdfPath, visiblePages, currentVolume.title);
       } else {
         alert("Incorrect password. PDF download aborted.");
