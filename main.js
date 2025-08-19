@@ -1,59 +1,4 @@
-// Import List
-const IMPORT_LIST = [
-  {
-    title: "Tensura Volume 1",
-    name: "Volume 1",
-    link: "/novel/1",
-    page: {
-      start: 1,
-      end: 2,
-      block: [
-        3, 5, 7, 8, 9, 10, 11, 19, 25, 46, 65, 67, 73, 75, 118, 127, 129, 157, 194,
-        196, 213, 227, 245, 250, 254, 256, 258, 260, 287,
-      ],
-    },
-  },
-  {
-    title: "Tensura Volume 2",
-    name: "Volume 2",
-    link: "/novel/2",
-    page: {
-      start: 1,
-      end: 6,
-      block: [3, 5],
-    },
-  },
-  {
-    title: "Tensura Volume 3",
-    name: "Volume 3",
-    link: "/novel/3",
-    page: {
-      start: 1,
-      end: null,
-      block: [],
-    },
-  },
-  {
-    title: "Tensura Volume 4",
-    name: "Volume 4",
-    link: "/novel/4",
-    page: {
-      start: null,
-      end: null,
-      block: [],
-    },
-  },
-  {
-    title: "Tensura Volume 5",
-    name: "Volume 5",
-    link: "/novel/5",
-    page: {
-      start: null,
-      end: null,
-      block: [],
-    },
-  },
-];
+const IMPORT_LIST = EXPORT_LIST
 
 // PDF Tools
 const pdfTools = document.getElementById("pdf_tools");
@@ -94,10 +39,14 @@ window.addEventListener("resize", () => {
   }
 });
 
+const PDF_DOWNLOAD_PASSWORD = atob(
+  atob(atob(atob(atob("VjJ0V2ExWXlVbGhVV0hCWFltMTRZVlpXVVhkUFVUMDk="))))
+);
+
 // Populate sidebar from IMPORT_LIST
 const sidebarUl = sidebar.querySelector("ul");
 sidebarUl.innerHTML = IMPORT_LIST.map(
-  (item) => `<li><a href="#${item.link}">${item.name}</a></li>`
+  (item) => `<li><a href="${item.link}">${item.name}</a></li>`
 ).join("");
 const links = sidebar.querySelectorAll("a");
 links.forEach((link) =>
@@ -113,9 +62,8 @@ links.forEach((link) =>
 // PDF Loader
 const PDF_NAME = document.getElementById("title-pdf-name");
 const pdfContent = document.getElementById("pdf-content");
-const loadingMessage = document.getElementById("loading-message"); // Assuming you have <div id="loading-message" style="display: none; text-align: center; font-size: 24px; margin-top: 50px;">Loading...</div> in HTML
 const message_404 = "404 File Not Found";
-const message_content_404 = `<br><br><br><br><br><br><br><br><h1 style="font-size: 50px; text-align: center;">No Such File Exists.<h1/>`;
+const message_content_404 = `<br><br><br><br><br><br><br><br><h1 style="font-size: 50px; text-align: center;">No Such File Exists.</h1>`;
 let totalPages = 0; // Store total number of pages
 let currentDisplayed = 1; // Track current displayed page index (1-based)
 let pdf = null; // Store PDF document object
@@ -174,7 +122,7 @@ const renderPage = async (displayedNum, canvas) => {
       canvasContext: canvas.getContext("2d"),
       viewport,
     }).promise;
-    document.getElementById("page-title").textContent = `Page ${originalPage}`;
+    document.getElementById("page-title").textContent = `Page ${displayedNum}`;
     document.getElementById("pdf-route-input").value = displayedNum;
     document.getElementById("pdf-route-max-value").textContent =
       visiblePages.length;
@@ -184,10 +132,75 @@ const renderPage = async (displayedNum, canvas) => {
   }
 };
 
-const renderPDF = async (pdfPath, volume) => {
-  pdfContent.innerHTML = ""; // Clear previous content
-  if (loadingMessage) loadingMessage.style.display = "block"; // Show loading
+const getPageImageURL = async (pdfPath, startPage) => {
+  try {
+    const pdf = await pdfjsLib.getDocument(pdfPath).promise;
+    const totalPages = pdf.numPages;
+    if (startPage === null || startPage < 1 || startPage > totalPages) {
+      return ""; // Return empty string if start page is invalid
+    }
+    const page = await pdf.getPage(startPage);
+    const targetWidth = 2400;
+    const targetHeight = 3600;
+    const viewport = page.getViewport({ scale: 1.0 });
+    const scale = Math.min(
+      targetWidth / viewport.width,
+      targetHeight / viewport.height
+    );
+    const scaledViewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const context = canvas.getContext("2d");
+    // Center the page in the canvas
+    const offsetX = (targetWidth - scaledViewport.width) / 2;
+    const offsetY = (targetHeight - scaledViewport.height) / 2;
+    context.translate(offsetX, offsetY);
+    await page.render({
+      canvasContext: context,
+      viewport: scaledViewport,
+    }).promise;
+    return canvas.toDataURL("image/png", 1.0); // Quality set to maximum
+  } catch (err) {
+    console.error("Error generating page image:", err);
+    return "";
+  }
+};
 
+const saveEditedPDF = async (pdfPath, visiblePages, volumeTitle) => {
+  try {
+    // Load the original PDF
+    const response = await fetch(pdfPath);
+    const pdfBytes = await response.arrayBuffer();
+    const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+
+    // Create a new PDF document
+    const newPdfDoc = await PDFLib.PDFDocument.create();
+
+    // Copy only the visible pages to the new PDF
+    const copiedPages = await newPdfDoc.copyPages(
+      pdfDoc,
+      visiblePages.map((page) => page - 1)
+    );
+    copiedPages.forEach((page) => newPdfDoc.addPage(page));
+
+    // Save the new PDF
+    const pdfBytesNew = await newPdfDoc.save();
+    const blob = new Blob([pdfBytesNew], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${volumeTitle}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("Failed to save edited PDF:", err);
+    alert("Failed to save edited PDF.");
+  }
+};
+
+const renderPDF = async (pdfPath, volume) => {
+  pdfContent.innerHTML = "";
   try {
     console.log("Attempting to load PDF:", pdfPath);
     pdf = await pdfjsLib.getDocument(pdfPath).promise;
@@ -202,8 +215,6 @@ const renderPDF = async (pdfPath, volume) => {
     if (visiblePages.length === 0) {
       throw new Error("No visible pages available.");
     }
-
-    if (loadingMessage) loadingMessage.style.display = "none"; // Hide loading
 
     // Create single page container
     const pageContainer = document.createElement("div");
@@ -236,6 +247,12 @@ const renderPDF = async (pdfPath, volume) => {
     saveButton.className = "page-button";
     saveButton.textContent = "Save Img";
     buttonsContainer.appendChild(saveButton);
+
+    // Create Save Pdf button
+    const savePdfButton = document.createElement("button");
+    savePdfButton.className = "page-button";
+    savePdfButton.textContent = "Save PDF";
+    buttonsContainer.appendChild(savePdfButton);
 
     pageTop.appendChild(buttonsContainer);
     pageContainer.appendChild(pageTop);
@@ -275,7 +292,7 @@ const renderPDF = async (pdfPath, volume) => {
       }
     });
 
-    // Add event listener for Save Img
+    // Add event listener For Save Img
     saveButton.addEventListener("click", () => {
       canvas.toBlob((blob) => {
         const url = URL.createObjectURL(blob);
@@ -285,6 +302,16 @@ const renderPDF = async (pdfPath, volume) => {
         a.click();
         URL.revokeObjectURL(url);
       });
+    });
+
+    // Add event listener for Save PDF
+    savePdfButton.addEventListener("click", async () => {
+      const password = prompt("Enter password to download edited PDF:");
+      if (password === PDF_DOWNLOAD_PASSWORD) {
+        await saveEditedPDF(pdfPath, visiblePages, currentVolume.title);
+      } else {
+        alert("Incorrect password. PDF download aborted.");
+      }
     });
 
     // Add event listeners for navigation buttons
@@ -329,32 +356,55 @@ const renderPDF = async (pdfPath, volume) => {
     });
   } catch (err) {
     console.error("PDF Render Error:", err);
-    if (loadingMessage) loadingMessage.style.display = "none"; // Hide loading on error
     PDF_NAME.innerHTML = message_404;
     document.title = message_404;
     pdfContent.innerHTML = message_content_404;
   }
 };
 
+const renderDefaultCards = async () => {
+  PDF_NAME.innerHTML = "All available";
+  document.title = "All available";
+  const cards = await Promise.all(
+    IMPORT_LIST.map(async (item) => {
+      const pdfPath = PDF_LINK(item.link, false);
+      const imageSrc = await getPageImageURL(pdfPath, item.page.start);
+      return `
+        <a href="${item.link}" class="page-card-container">
+          <img src="${imageSrc}" alt="${item.title}" class="page-card-img">
+          <div class="page-card-title">${item.title}</div>
+        </a>
+      `;
+    })
+  );
+  pdfContent.innerHTML = cards.join("");
+};
+
 const updatePDFLink = async () => {
-  const hash = location.href.split(location.host)[1] || "/novel/1"; // Default to /novel/1
+  const hash = location.href.split(location.host)[1];
   console.log("Hash:", hash);
+
+  // If no hash or hash is just "/", render default cards
+  if (!hash || hash === "/" || hash === "/#") {
+    await renderDefaultCards();
+    return;
+  }
+
+  const pdfPath = PDF_LINK(hash, false);
+  const pdfName = PDF_LINK(hash, true);
   const volume =
     IMPORT_LIST.find((item) => item.link === hash.split("#")[1]) ||
     IMPORT_LIST[0];
-  const pdfPath = PDF_LINK(hash, false);
-  const pdfName = PDF_LINK(hash, true);
   console.log("PDF Path:", pdfPath);
   console.log("PDF Name:", pdfName);
   console.log("Volume:", volume);
+
   if (!pdfPath || !volume) {
-    console.log("Invalid PDF path or volume, showing 404");
-    if (loadingMessage) loadingMessage.style.display = "none";
-    PDF_NAME.innerHTML = message_404;
-    document.title = message_404;
-    pdfContent.innerHTML = message_content_404;
+    console.log("Invalid PDF path or volume, showing default cards");
+    await renderDefaultCards();
     return;
   }
+
   try {
     console.log("Fetching:", pdfPath);
     const resp = await fetch(pdfPath, { method: "HEAD" });
@@ -364,18 +414,12 @@ const updatePDFLink = async () => {
       document.title = volume.title;
       await renderPDF(pdfPath, volume);
     } else {
-      console.log("Fetch failed, showing 404");
-      if (loadingMessage) loadingMessage.style.display = "none";
-      PDF_NAME.innerHTML = message_404;
-      document.title = message_404;
-      pdfContent.innerHTML = message_content_404;
+      console.log("Fetch failed, showing default cards");
+      await renderDefaultCards();
     }
   } catch (err) {
     console.error("Fetch Error:", err);
-    if (loadingMessage) loadingMessage.style.display = "none";
-    PDF_NAME.innerHTML = message_404;
-    document.title = message_404;
-    pdfContent.innerHTML = message_content_404;
+    await renderDefaultCards();
   }
 };
 
